@@ -388,7 +388,55 @@ export const BulkUpdateCharacterMetaBody = zod.object({
   "isReleased": zod.boolean().optional().describe('Omit to leave released status unchanged.')
 })
 
-export const BulkUpdateCharacterMetaResponseItem = zod.object({
+export const BulkUpdateCharacterMetaResponse = zod.object({
+  "updated": zod.array(zod.object({
+  "character": zod.object({
+  "id": zod.string(),
+  "name": zod.string(),
+  "rarity": zod.number().int(),
+  "path": zod.string().describe('Display path name, e.g. Preservation'),
+  "element": zod.string().describe('Display element name, e.g. Lightning'),
+  "elementColor": zod.string().nullish().describe('Hex color from elements.json, if available'),
+  "iconUrl": zod.string()
+}).describe('A character as shown to players. path and element are display names, never internal keys.'),
+  "roles": zod.array(zod.enum(['dps', 'sub_dps', 'support', 'sustain'])),
+  "genericScore": zod.number().nullish(),
+  "isReleased": zod.boolean(),
+  "hasMeta": zod.boolean(),
+  "isSample": zod.boolean(),
+  "needsReview": zod.boolean().describe('No roles or not released'),
+  "isTrailblazer": zod.boolean()
+})),
+  "previous": zod.array(zod.object({
+  "characterId": zod.string(),
+  "bulkUpdatedAt": zod.string().describe('The character\'s last-updated time as written by the bulk change. Restore refuses if it has changed since.'),
+  "hadMeta": zod.boolean().describe('False if the character had no curated entry before the change'),
+  "roles": zod.array(zod.enum(['dps', 'sub_dps', 'support', 'sustain'])),
+  "isReleased": zod.boolean(),
+  "isSample": zod.boolean()
+}).describe('A character\'s curated values as they were before a bulk change'))
+})
+
+
+/**
+ * @summary Undo a bulk change by putting back each character's previous roles and released status
+ */
+export const restoreCharacterMetaBodySnapshotsMax = 500;
+
+
+
+export const RestoreCharacterMetaBody = zod.object({
+  "snapshots": zod.array(zod.object({
+  "characterId": zod.string(),
+  "bulkUpdatedAt": zod.string().describe('The character\'s last-updated time as written by the bulk change. Restore refuses if it has changed since.'),
+  "hadMeta": zod.boolean().describe('False if the character had no curated entry before the change'),
+  "roles": zod.array(zod.enum(['dps', 'sub_dps', 'support', 'sustain'])),
+  "isReleased": zod.boolean(),
+  "isSample": zod.boolean()
+}).describe('A character\'s curated values as they were before a bulk change')).min(1).max(restoreCharacterMetaBodySnapshotsMax)
+})
+
+export const RestoreCharacterMetaResponseItem = zod.object({
   "character": zod.object({
   "id": zod.string(),
   "name": zod.string(),
@@ -406,7 +454,7 @@ export const BulkUpdateCharacterMetaResponseItem = zod.object({
   "needsReview": zod.boolean().describe('No roles or not released'),
   "isTrailblazer": zod.boolean()
 })
-export const BulkUpdateCharacterMetaResponse = zod.array(BulkUpdateCharacterMetaResponseItem)
+export const RestoreCharacterMetaResponse = zod.array(RestoreCharacterMetaResponseItem)
 
 
 /**

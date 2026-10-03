@@ -318,7 +318,32 @@ paths:
               $ref: "#/components/schemas/BulkCharacterMetaInput"
       responses:
         "200":
-          description: Updated characters
+          description: Updated characters plus their values from before the change (for undo)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BulkCharacterMetaResult"
+        "400":
+          description: Invalid input or unknown character ids (nothing is saved)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /admin/characters/bulk-meta/restore:
+    post:
+      operationId: restoreCharacterMeta
+      tags: [admin]
+      summary: Undo a bulk change by putting back each character's previous roles and released status
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RestoreCharacterMetaInput"
+      responses:
+        "200":
+          description: Restored characters
           content:
             application/json:
               schema:
@@ -327,6 +352,12 @@ paths:
                   $ref: "#/components/schemas/AdminCharacter"
         "400":
           description: Invalid input or unknown character ids (nothing is saved)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: Some characters were edited after the bulk change (nothing is restored)
           content:
             application/json:
               schema:
@@ -743,6 +774,49 @@ components:
         isReleased:
           type: boolean
           description: Omit to leave released status unchanged.
+
+    CharacterMetaSnapshot:
+      type: object
+      required: [characterId, hadMeta, roles, isReleased, isSample, bulkUpdatedAt]
+      description: A character's curated values as they were before a bulk change
+      properties:
+        characterId: { type: string }
+        bulkUpdatedAt:
+          type: string
+          description: The character's last-updated time as written by the bulk change. Restore refuses if it has changed since.
+        hadMeta:
+          type: boolean
+          description: False if the character had no curated entry before the change
+        roles:
+          type: array
+          items:
+            $ref: "#/components/schemas/Role"
+        isReleased: { type: boolean }
+        isSample: { type: boolean }
+
+    BulkCharacterMetaResult:
+      type: object
+      required: [updated, previous]
+      properties:
+        updated:
+          type: array
+          items:
+            $ref: "#/components/schemas/AdminCharacter"
+        previous:
+          type: array
+          items:
+            $ref: "#/components/schemas/CharacterMetaSnapshot"
+
+    RestoreCharacterMetaInput:
+      type: object
+      required: [snapshots]
+      properties:
+        snapshots:
+          type: array
+          minItems: 1
+          maxItems: 500
+          items:
+            $ref: "#/components/schemas/CharacterMetaSnapshot"
 
     DpsCoverage:
       type: object

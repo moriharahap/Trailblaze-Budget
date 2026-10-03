@@ -24,6 +24,7 @@ import type {
   AdminLoginRequest,
   AdminSession,
   BulkCharacterMetaInput,
+  BulkCharacterMetaResult,
   CharacterMetaInput,
   DpsCoverage,
   DpsOption,
@@ -40,6 +41,7 @@ import type {
   ListAdminLineupsParams,
   ListAdminSubstitutesParams,
   OwnershipMap,
+  RestoreCharacterMetaInput,
   SlotRole,
   SubstituteCandidates,
   SubstitutePool,
@@ -1240,7 +1242,7 @@ export const getBulkUpdateCharacterMetaUrl = () => {
 /**
  * @summary Apply roles and/or released status to many characters at once (generic score untouched)
  */
-export const bulkUpdateCharacterMeta = async (bulkCharacterMetaInput: BulkCharacterMetaInput, options?: Parameters<typeof customFetch>[1]): Promise<AdminCharacter[]> => {
+export const bulkUpdateCharacterMeta = async (bulkCharacterMetaInput: BulkCharacterMetaInput, options?: Parameters<typeof customFetch>[1]): Promise<BulkCharacterMetaResult> => {
 
     const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
     if (!h) return {};
@@ -1256,7 +1258,7 @@ export const bulkUpdateCharacterMeta = async (bulkCharacterMetaInput: BulkCharac
     }
     return headers;
   };
-return customFetch<AdminCharacter[]>(getBulkUpdateCharacterMetaUrl(),
+return customFetch<BulkCharacterMetaResult>(getBulkUpdateCharacterMetaUrl(),
   {
     ...options,
     method: 'POST',
@@ -1315,6 +1317,94 @@ export const useBulkUpdateCharacterMeta = <TError = ErrorType<ErrorResponse>,
         TContext
       > => {
       return useMutation(getBulkUpdateCharacterMetaMutationOptions(options));
+    }
+
+export const getRestoreCharacterMetaUrl = () => {
+
+
+
+
+  return `/api/admin/characters/bulk-meta/restore`
+}
+
+/**
+ * @summary Undo a bulk change by putting back each character's previous roles and released status
+ */
+export const restoreCharacterMeta = async (restoreCharacterMetaInput: RestoreCharacterMetaInput, options?: Parameters<typeof customFetch>[1]): Promise<AdminCharacter[]> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return customFetch<AdminCharacter[]>(getRestoreCharacterMetaUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(restoreCharacterMetaInput)
+  }
+);}
+
+
+
+
+
+export const getRestoreCharacterMetaMutationKey = () => ['restoreCharacterMeta'] as const;
+
+export const getRestoreCharacterMetaMutationOptions = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof restoreCharacterMeta>>, TError,RestoreCharacterMetaMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof restoreCharacterMeta>>, TError,RestoreCharacterMetaMutationVariables, TContext> => {
+
+const mutationKey = getRestoreCharacterMetaMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof restoreCharacterMeta>>, RestoreCharacterMetaMutationVariables> = (props) => {
+          const {data} = props ?? {};
+
+          return  restoreCharacterMeta(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type RestoreCharacterMetaMutationResult = NonNullable<Awaited<ReturnType<typeof restoreCharacterMeta>>>
+    export type RestoreCharacterMetaMutationBody = BodyType<RestoreCharacterMetaInput>
+    export type RestoreCharacterMetaMutationError = ErrorType<ErrorResponse>
+    export type RestoreCharacterMetaMutationVariables = {data: BodyType<RestoreCharacterMetaInput>}
+
+    /**
+ * @summary Undo a bulk change by putting back each character's previous roles and released status
+ */
+export const useRestoreCharacterMeta = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof restoreCharacterMeta>>, TError,RestoreCharacterMetaMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof restoreCharacterMeta>>,
+        TError,
+        RestoreCharacterMetaMutationVariables,
+        TContext
+      > => {
+      return useMutation(getRestoreCharacterMetaMutationOptions(options));
     }
 
 export const getListDpsCoverageUrl = () => {

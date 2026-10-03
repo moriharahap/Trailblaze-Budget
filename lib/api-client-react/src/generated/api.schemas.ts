@@ -256,6 +256,33 @@ export interface BulkCharacterMetaInput {
   isReleased?: boolean;
 }
 
+/**
+ * A character's curated values as they were before a bulk change
+ */
+export interface CharacterMetaSnapshot {
+  characterId: string;
+  /** The character's last-updated time as written by the bulk change. Restore refuses if it has changed since. */
+  bulkUpdatedAt: string;
+  /** False if the character had no curated entry before the change */
+  hadMeta: boolean;
+  roles: Role[];
+  isReleased: boolean;
+  isSample: boolean;
+}
+
+export interface BulkCharacterMetaResult {
+  updated: AdminCharacter[];
+  previous: CharacterMetaSnapshot[];
+}
+
+export interface RestoreCharacterMetaInput {
+  /**
+     * @minItems 1
+     * @maxItems 500
+     */
+  snapshots: CharacterMetaSnapshot[];
+}
+
 export interface DpsCoverage {
   character: CharacterSummary;
   isReleased: boolean;

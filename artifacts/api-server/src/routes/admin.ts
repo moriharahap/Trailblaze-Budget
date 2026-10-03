@@ -5,16 +5,19 @@ import {
   characterMetaTable,
   lineupsTable,
   substitutesTable,
+  type CharacterRow,
+  type CharacterMetaRow,
   type LineupRow,
   type SubstituteRow,
   type RoleValue,
 } from "@workspace/db";
-import { asc, eq, inArray } from "drizzle-orm";
+import { and, asc, eq, inArray, isNull } from "drizzle-orm";
 import {
   ListAdminCharactersQueryParams,
   UpdateCharacterMetaParams,
   UpdateCharacterMetaBody,
   BulkUpdateCharacterMetaBody,
+  RestoreCharacterMetaBody,
   ListAdminLineupsQueryParams,
   CreateLineupBody,
   UpdateLineupParams,
@@ -25,6 +28,7 @@ import {
   DeleteSubstitutePoolParams,
 } from "@workspace/api-zod";
 import { syncGameData, getSyncStatus } from "../lib/gameData";
+import { findChangedSinceBulk } from "../lib/bulkUndo";
 import { loadRoster, toSummary, isVisible, nameCompare } from "../lib/characters";
 
 const router: IRouter = Router();
@@ -33,6 +37,19 @@ async function syncStatusDto() {
   const s = await getSyncStatus();
   const { highest, ...rest } = s;
   return { ...rest, highestIds: highest.map(toSummary) };
+}
+
+function adminCharacterDto(character: CharacterRow, meta: CharacterMetaRow | undefined) {
+  return {
+    character: toSummary(character),
+    roles: meta?.roles ?? [],
+    genericScore: meta?.genericScore ?? null,
+    isReleased: meta?.isReleased ?? false,
+    hasMeta: !!meta,
+    isSample: meta?.isSample ?? false,
+    needsReview: !isVisible(meta),
+    isTrailblazer: character.isTrailblazer,
+  };
 }
 
 router.get("/admin/sync", async (_req, res): Promise<void> => {
@@ -135,21 +152,97 @@ router.post("/admin/characters/bulk-meta", async (req, res): Promise<void> => {
   });
 
   const byId = new Map(characters.map((c) => [c.id, c]));
-  res.json(
-    saved.map((meta) => {
-      const character = byId.get(meta.characterId)!;
-      return {
-        character: toSummary(character),
-        roles: meta.roles,
-        genericScore: meta.genericScore,
-        isReleased: meta.isReleased,
-        hasMeta: true,
-        isSample: meta.isSample,
-        needsReview: !isVisible(meta),
-        isTrailblazer: character.isTrailblazer,
+  const writtenAt = new Map(saved.map((m) => [m.characterId, m.updatedAt]));
+  // Snapshot of what each character looked like before, so the curator can undo.
+  const previous = ids.map((id) => {
+    const prev = existing.get(id);
+    return {
+      characterId: id,
+      bulkUpdatedAt: writtenAt.get(id)!.toISOString(),
+      hadMeta: !!prev,
+      roles: prev?.roles ?? [],
+      isReleased: prev?.isReleased ?? false,
+      isSample: prev?.isSample ?? false,
+    };
+  });
+  res.json({
+    updated: saved.map((meta) => adminCharacterDto(byId.get(meta.characterId)!, meta)),
+    previous,
+  });
+});
+
+router.post("/admin/characters/bulk-meta/restore", async (req, res): Promise<void> => {
+  const body = RestoreCharacterMetaBody.safeParse(req.body);
+  if (!body.success) {
+    res.status(400).json({ error: body.error.message });
+    return;
+  }
+  const snapshots = new Map(body.data.snapshots.map((s) => [s.characterId, s]));
+  const ids = [...snapshots.keys()];
+  const characters = await db
+    .select()
+    .from(charactersTable)
+    .where(inArray(charactersTable.id, ids));
+  if (characters.length !== ids.length) {
+    const known = new Set(characters.map((c) => c.id));
+    const unknown = ids.filter((id) => !known.has(id));
+    res.status(400).json({ error: `Unknown character ids: ${unknown.join(", ")}` });
+    return;
+  }
+
+  // Generic score is left alone, just like the bulk change that is being undone.
+  const restored = await db.transaction(async (tx) => {
+    // Lock the entries and refuse if any was edited after the bulk change,
+    // so an undo can never overwrite newer work.
+    const current = new Map(
+      (
+        await tx
+          .select()
+          .from(characterMetaTable)
+          .where(inArray(characterMetaTable.characterId, ids))
+          .for("update")
+      ).map((m) => [m.characterId, m]),
+    );
+    const changed = findChangedSinceBulk([...snapshots.values()], current);
+    if (changed.length > 0) return { ok: false as const, changed };
+    const out = new Map<string, CharacterMetaRow | undefined>();
+    for (const [id, snap] of snapshots) {
+      if (!snap.hadMeta) {
+        // The bulk change created this entry; remove it again unless a score was added since.
+        const deleted = await tx
+          .delete(characterMetaTable)
+          .where(and(eq(characterMetaTable.characterId, id), isNull(characterMetaTable.genericScore)))
+          .returning();
+        if (deleted.length > 0) {
+          out.set(id, undefined);
+          continue;
+        }
+      }
+      const values = {
+        roles: [...new Set(snap.roles)] as RoleValue[],
+        isReleased: snap.isReleased,
+        isSample: snap.isSample,
+        updatedAt: new Date(),
       };
-    }),
-  );
+      const [meta] = await tx
+        .insert(characterMetaTable)
+        .values({ characterId: id, genericScore: null, ...values })
+        .onConflictDoUpdate({ target: characterMetaTable.characterId, set: values })
+        .returning();
+      out.set(id, meta);
+    }
+    return { ok: true as const, out };
+  });
+
+  const byId = new Map(characters.map((c) => [c.id, c]));
+  if (!restored.ok) {
+    const names = restored.changed.map((id) => byId.get(id)!.name).join(", ");
+    res.status(409).json({
+      error: `Can't undo: ${names} changed after the bulk change. Nothing was undone.`,
+    });
+    return;
+  }
+  res.json(ids.map((id) => adminCharacterDto(byId.get(id)!, restored.out.get(id))));
 });
 
 router.put("/admin/characters/:characterId/meta", async (req, res): Promise<void> => {

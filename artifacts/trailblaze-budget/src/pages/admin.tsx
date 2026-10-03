@@ -1,15 +1,16 @@
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { motion } from "framer-motion";
-import { AlertTriangle, ArrowDown, ArrowUp, RefreshCw, Trash2, Plus, Save, X } from "lucide-react";
-import { useQueryClient } from "@tanstack/react-query";
+import { AlertTriangle, ArrowDown, ArrowUp, RefreshCw, Trash2, Plus, Save, Undo2, X } from "lucide-react";
+import { useIsMutating, useQueryClient } from "@tanstack/react-query";
 import {
   useGetSyncStatus, getGetSyncStatusQueryKey, useRunSync,
-  useListAdminCharacters, getListAdminCharactersQueryKey, useUpdateCharacterMeta, useBulkUpdateCharacterMeta,
+  useListAdminCharacters, getListAdminCharactersQueryKey, useUpdateCharacterMeta, useBulkUpdateCharacterMeta, useRestoreCharacterMeta,
+  getUpdateCharacterMetaMutationKey, getBulkUpdateCharacterMetaMutationKey, getRestoreCharacterMetaMutationKey,
   useListDpsCoverage, getListDpsCoverageQueryKey,
   useListAdminLineups, getListAdminLineupsQueryKey, useCreateLineup, useUpdateLineup, useDeleteLineup,
   useListAdminSubstitutes, getListAdminSubstitutesQueryKey, useUpsertSubstitutePool, useDeleteSubstitutePool,
   getListDpsQueryKey,
-  type AdminCharacter, type Role, type SlotRole, type Lineup, type LineupSlot, type SubstituteOption, type SubstitutePool,
+  type AdminCharacter, type CharacterMetaSnapshot, type Role, type SlotRole, type Lineup, type LineupSlot, type SubstituteOption, type SubstitutePool,
 } from "@workspace/api-client-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Switch } from "@/components/ui/switch";
@@ -112,11 +113,69 @@ function Stat({ k, v }: { k: string; v: string }) {
   return <div><div className="font-data text-[10px] uppercase tracking-wider text-muted-foreground">{k}</div><div className="font-medium">{v}</div></div>;
 }
 
+// How long the "Undo" action stays on the notice after a bulk change.
+const UNDO_WINDOW_MS = 30_000;
+const plural = (n: number) => `${n} character${n === 1 ? "" : "s"}`;
+const CHARACTER_MUTATIONS = new Set<unknown>([
+  getUpdateCharacterMetaMutationKey()[0], getBulkUpdateCharacterMetaMutationKey()[0], getRestoreCharacterMetaMutationKey()[0],
+]);
+
+/** True while any character save, bulk change or undo is in flight, so they never overlap. */
+function useCharacterWriteBusy() {
+  return useIsMutating({ predicate: (m) => CHARACTER_MUTATIONS.has(m.options.mutationKey?.[0]) }) > 0;
+}
+
 function CharactersPanel() {
   const [filter, setFilter] = useState<"needs_review" | "all">("needs_review");
   const [q, setQ] = useState("");
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [notice, setNotice] = useState<string | null>(null);
+  // Only the most recent bulk change can be undone; any newer change replaces or clears this.
+  const [undo, setUndo] = useState<CharacterMetaSnapshot[] | null>(null);
+  const [undoError, setUndoError] = useState<string | null>(null);
+  const restore = useRestoreCharacterMeta();
+  const inv = useInvalidateAdmin();
+  const busy = useCharacterWriteBusy();
+  // Bumped on every newer change, so a late undo response can't clear a newer snapshot.
+  const undoGen = useRef(0);
+  useEffect(() => {
+    if (!undo) return;
+    const t = setTimeout(() => setUndo(null), UNDO_WINDOW_MS);
+    return () => clearTimeout(t);
+  }, [undo]);
+  const onBulkDone = (count: number, previous: CharacterMetaSnapshot[]) => {
+    undoGen.current += 1;
+    setNotice(`Updated ${plural(count)}.`);
+    setUndo(previous.length > 0 ? previous : null);
+    setUndoError(null);
+    setSelected(new Set());
+  };
+  const onUndo = () => {
+    if (!undo || busy) return;
+    const gen = undoGen.current;
+    setUndoError(null);
+    restore.mutate({ data: { snapshots: undo } }, {
+      onSuccess: (rows) => {
+        inv();
+        if (gen !== undoGen.current) return;
+        undoGen.current += 1;
+        setUndo(null);
+        setNotice(`Undid the bulk change for ${plural(rows.length)}.`);
+      },
+      onError: (err) => {
+        if (gen !== undoGen.current) return;
+        setUndoError(errMsg(err));
+        // 409: something changed since the bulk change, so this undo can never apply.
+        if ((err as { status?: number }).status === 409) setUndo(null);
+      },
+    });
+  };
+  const onSingleSaved = () => {
+    // A newer edit makes the bulk snapshot stale, so undo would clobber it.
+    undoGen.current += 1;
+    setUndo(null);
+    setUndoError(null);
+  };
   const { data, isLoading } = useListAdminCharacters({ filter });
   const list = (data ?? []).filter((c) => c.character.name.toLowerCase().includes(q.toLowerCase()));
   const shownIds = list.map((c) => c.character.id);
@@ -152,15 +211,24 @@ function CharactersPanel() {
           )}
         </div>
       )}
-      {notice && selected.size === 0 && (
-        <p className="rounded-xl border border-primary/40 bg-primary/10 px-3 py-2 text-xs text-primary" data-testid="text-bulk-success">{notice}</p>
+      {notice && (selected.size === 0 || undo) && (
+        <div className="flex items-center gap-3 rounded-xl border border-primary/40 bg-primary/10 px-3 py-2 text-xs text-primary">
+          <span className="flex-1" data-testid="text-bulk-success">{notice}</span>
+          {undoError && <span className="text-destructive" data-testid="text-bulk-undo-error">{undoError}</span>}
+          {undo && (
+            <button onClick={onUndo} disabled={busy}
+              className="inline-flex items-center gap-1 rounded-lg border border-primary/60 px-2.5 py-1 font-bold hover:bg-primary/15 disabled:opacity-60" data-testid="button-bulk-undo">
+              <Undo2 className="h-3.5 w-3.5" />{restore.isPending ? "Undoing…" : "Undo"}
+            </button>
+          )}
+        </div>
       )}
-      {selected.size > 0 && <BulkBar ids={[...selected]} onDone={(n) => { setNotice(`Updated ${n} character${n === 1 ? "" : "s"}.`); setSelected(new Set()); }} />}
+      {selected.size > 0 && <BulkBar ids={[...selected]} busy={busy} onDone={onBulkDone} />}
       {isLoading ? <Skeleton className="h-40 rounded-2xl" /> : list.length === 0 ? (
         <Panel className="text-center text-sm text-muted-foreground">{filter === "needs_review" ? "Nothing needs review. Clean archive." : "No characters."}</Panel>
       ) : list.map((c) => (
         <CharEditor key={`${c.character.id}:${c.roles.join(",")}:${c.isReleased}:${c.genericScore}`} c={c}
-          selected={selected.has(c.character.id)} onToggle={() => toggle(c.character.id)} />
+          selected={selected.has(c.character.id)} onToggle={() => toggle(c.character.id)} busy={busy} onSaved={onSingleSaved} />
       ))}
     </div>
   );
@@ -168,7 +236,7 @@ function CharactersPanel() {
 
 type ReleaseChoice = "keep" | "released" | "unreleased";
 
-function BulkBar({ ids, onDone }: { ids: string[]; onDone: (count: number) => void }) {
+function BulkBar({ ids, busy, onDone }: { ids: string[]; busy: boolean; onDone: (count: number, previous: CharacterMetaSnapshot[]) => void }) {
   const [roles, setRoles] = useState<Role[]>([]);
   const [mode, setMode] = useState<"add" | "replace">("add");
   const [release, setRelease] = useState<ReleaseChoice>("keep");
@@ -177,8 +245,8 @@ function BulkBar({ ids, onDone }: { ids: string[]; onDone: (count: number) => vo
   const inv = useInvalidateAdmin();
   // "Add" with no roles changes nothing; "Replace" with no roles clears roles on purpose.
   const touchesRoles = mode === "replace" || roles.length > 0;
-  const canApply = (touchesRoles || release !== "keep") && !bulk.isPending;
-  // Destructive bulk actions hide characters from the player app and can't be undone, so they need confirmation.
+  const canApply = (touchesRoles || release !== "keep") && !busy;
+  // Destructive bulk actions hide characters from the player app, so they need confirmation (undo is only briefly offered).
   const clearsRoles = mode === "replace" && roles.length === 0;
   const unreleases = release === "unreleased";
   const needsConfirm = clearsRoles || unreleases;
@@ -193,6 +261,7 @@ function BulkBar({ ids, onDone }: { ids: string[]; onDone: (count: number) => vo
     else apply();
   };
   const apply = () => {
+    if (busy) return;
     setError(null);
     bulk.mutate({
       data: {
@@ -201,9 +270,9 @@ function BulkBar({ ids, onDone }: { ids: string[]; onDone: (count: number) => vo
         ...(release !== "keep" ? { isReleased: release === "released" } : {}),
       },
     }, {
-      onSuccess: (rows) => {
+      onSuccess: (result) => {
         inv();
-        onDone(rows.length);
+        onDone(result.updated.length, result.previous);
       },
       onError: (err) => setError(errMsg(err)),
     });
@@ -252,12 +321,12 @@ function BulkBar({ ids, onDone }: { ids: string[]; onDone: (count: number) => vo
           <AlertDialogHeader>
             <AlertDialogTitle className="flex items-center gap-2"><AlertTriangle className="h-5 w-5 text-destructive" />Change {count}?</AlertDialogTitle>
             <AlertDialogDescription data-testid="text-bulk-confirm-description">
-              This will {consequences} for {count}. They will disappear from the player app, and this can't be undone.
+              This will {consequences} for {count}. They will disappear from the player app. You can undo it for a short time right after.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel data-testid="button-bulk-confirm-cancel">Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={apply} className="bg-destructive text-destructive-foreground hover:bg-destructive/90" data-testid="button-bulk-confirm-apply">
+            <AlertDialogAction onClick={apply} disabled={busy} className="bg-destructive text-destructive-foreground hover:bg-destructive/90" data-testid="button-bulk-confirm-apply">
               Yes, change {count}
             </AlertDialogAction>
           </AlertDialogFooter>
@@ -267,13 +336,13 @@ function BulkBar({ ids, onDone }: { ids: string[]; onDone: (count: number) => vo
   );
 }
 
-function CharEditor({ c, selected, onToggle }: { c: AdminCharacter; selected: boolean; onToggle: () => void }) {
+function CharEditor({ c, selected, onToggle, busy, onSaved }: { c: AdminCharacter; selected: boolean; onToggle: () => void; busy: boolean; onSaved: () => void }) {
   const [roles, setRoles] = useState<Role[]>(c.roles);
   const [score, setScore] = useState<string>(c.genericScore?.toString() ?? "");
   const [rel, setRel] = useState(c.isReleased);
   const upd = useUpdateCharacterMeta();
   const inv = useInvalidateAdmin();
-  const save = () => upd.mutate({ characterId: c.character.id, data: { roles, genericScore: score === "" ? null : Number(score), isReleased: rel } }, { onSuccess: inv });
+  const save = () => upd.mutate({ characterId: c.character.id, data: { roles, genericScore: score === "" ? null : Number(score), isReleased: rel } }, { onSuccess: () => { inv(); onSaved(); } });
   return (
     <Panel className={cn("space-y-3", selected && "border-primary/60")}>
       <div className="flex items-center gap-3">
@@ -293,7 +362,7 @@ function CharEditor({ c, selected, onToggle }: { c: AdminCharacter; selected: bo
         })}
         <input type="number" min={0} max={100} value={score} onChange={(e) => setScore(e.target.value)} placeholder="score" className={cn(inputCls, "w-20")} data-testid={`input-score-${c.character.id}`} />
         <label className="flex items-center gap-1.5 text-xs"><Switch checked={rel} onCheckedChange={setRel} data-testid={`switch-released-${c.character.id}`} />Released</label>
-        <button onClick={save} disabled={upd.isPending} className="ml-auto inline-flex items-center gap-1 rounded-lg bg-primary px-3 py-1.5 text-xs font-bold text-primary-foreground disabled:opacity-60" data-testid={`button-save-char-${c.character.id}`}>
+        <button onClick={save} disabled={busy} className="ml-auto inline-flex items-center gap-1 rounded-lg bg-primary px-3 py-1.5 text-xs font-bold text-primary-foreground disabled:opacity-60" data-testid={`button-save-char-${c.character.id}`}>
           <Save className="h-3.5 w-3.5" />{upd.isPending ? "Saving" : upd.isSuccess ? "Saved" : "Save"}
         </button>
       </div>
