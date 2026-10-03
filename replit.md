@@ -34,6 +34,7 @@ Honkai: Star Rail lineup builder for F2P players: pick a DPS, see curated meta l
 - Trailblazer {NICKNAME} pairs are merged into one row per path, keyed by the smallest id of the pair.
 - Lineups whose meta picks include a hidden character are skipped for players.
 - The SAMPLE seed runs once, tracked by the `sample_seed_v1` key in app_state. Rows deleted in /admin stay deleted. Editing a sample row in /admin clears its is_sample flag.
+- Guide-sourced lineups (user-approved): teams for the 19 user-listed DPS come from Prydwen, with sources in `docs/guide-lineups-sources.md` and data in `lib/guideLineups.data.ts`. They are imported once per DB (`guide_lineups_v1` key in app_state, on startup in dev and prod). The import only adds roles and skips any DPS that already has lineups, so admin edits win. Data still must never be invented from model knowledge; new guide data needs cited URLs and a new import key.
 - Admin auth: `/api/admin/login` sets a stateless HMAC-signed httpOnly cookie (path `/api/admin`, 7 days). Key = SESSION_SECRET + ADMIN_PASSWORD, so changing the password logs everyone out. `requireAdmin` is mounted on `/admin` in `routes/index.ts` after the public login/logout/session routes; new admin routes are protected automatically.
 - The explainer uses Replit AI Integrations (OpenAI), not an LLM_API_KEY secret.
 
