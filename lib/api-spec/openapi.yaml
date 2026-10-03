@@ -3,13 +3,19 @@ info:
   # Do not change the title, if the title changes, the import paths will be broken
   title: Api
   version: 0.1.0
-  description: API specification
+  description: Trailblaze Budget API
 servers:
   - url: /api
     description: Base API path
 tags:
   - name: health
     description: Health operations
+  - name: lineups
+    description: Player-facing lineup builder
+  - name: ownership
+    description: Anonymous per-user character ownership
+  - name: admin
+    description: Game data sync and curated data editing
 paths:
   /healthz:
     get:
@@ -24,6 +30,381 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+
+  /dps:
+    get:
+      operationId: listDps
+      tags: [lineups]
+      summary: Released DPS characters that have at least one curated lineup
+      responses:
+        "200":
+          description: DPS list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/DpsOption"
+
+  /lineups/{dpsId}:
+    get:
+      operationId: getLineups
+      tags: [lineups]
+      summary: Curated lineups for a DPS, resolved against the user's ownership
+      parameters:
+        - name: dpsId
+          in: path
+          required: true
+          schema: { type: string }
+        - name: anonId
+          in: query
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Resolved lineups
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LineupsResult"
+        "404":
+          description: DPS not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /substitutes/{dpsId}/{role}:
+    get:
+      operationId: getSubstitutes
+      tags: [lineups]
+      summary: Candidate characters for the substitute picker
+      parameters:
+        - name: dpsId
+          in: path
+          required: true
+          schema: { type: string }
+        - name: role
+          in: path
+          required: true
+          schema:
+            $ref: "#/components/schemas/SlotRole"
+        - name: anonId
+          in: query
+          required: false
+          schema: { type: string }
+      responses:
+        "200":
+          description: Substitute candidates
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SubstituteCandidates"
+
+  /ownership/{anonId}:
+    get:
+      operationId: getOwnership
+      tags: [ownership]
+      summary: Ownership map for an anonymous user
+      parameters:
+        - name: anonId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Ownership map (missing ids are unknown)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OwnershipMap"
+    put:
+      operationId: updateOwnership
+      tags: [ownership]
+      summary: Merge ownership statuses for an anonymous user
+      parameters:
+        - name: anonId
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/OwnershipMap"
+      responses:
+        "200":
+          description: Full updated ownership map
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OwnershipMap"
+
+  /explain:
+    post:
+      operationId: explainLineup
+      tags: [lineups]
+      summary: LLM explanation of a resolved lineup (on demand)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ExplainInput"
+      responses:
+        "200":
+          description: Explanation
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Explanation"
+        "502":
+          description: LLM call failed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /admin/sync:
+    get:
+      operationId: getSyncStatus
+      tags: [admin]
+      summary: Status of the last game data sync
+      responses:
+        "200":
+          description: Sync status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SyncStatus"
+    post:
+      operationId: runSync
+      tags: [admin]
+      summary: Fetch game data from StarRailRes now (falls back to cache on failure)
+      responses:
+        "200":
+          description: Sync status after the run
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SyncStatus"
+
+  /admin/characters:
+    get:
+      operationId: listAdminCharacters
+      tags: [admin]
+      summary: All synced characters with their curated meta
+      parameters:
+        - name: filter
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [all, needs_review]
+      responses:
+        "200":
+          description: Characters
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/AdminCharacter"
+
+  /admin/characters/{characterId}/meta:
+    put:
+      operationId: updateCharacterMeta
+      tags: [admin]
+      summary: Create or update curated meta for a character
+      parameters:
+        - name: characterId
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CharacterMetaInput"
+      responses:
+        "200":
+          description: Updated character
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminCharacter"
+        "404":
+          description: Character not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /admin/coverage:
+    get:
+      operationId: listDpsCoverage
+      tags: [admin]
+      summary: For every character with the dps role, how much curated data exists
+      responses:
+        "200":
+          description: Coverage rows
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/DpsCoverage"
+
+  /admin/lineups:
+    get:
+      operationId: listAdminLineups
+      tags: [admin]
+      summary: Curated lineups (optionally for one DPS)
+      parameters:
+        - name: dpsId
+          in: query
+          required: false
+          schema: { type: string }
+      responses:
+        "200":
+          description: Lineups
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Lineup"
+    post:
+      operationId: createLineup
+      tags: [admin]
+      summary: Create a curated lineup
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LineupInput"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Lineup"
+        "400":
+          description: Invalid lineup
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /admin/lineups/{lineupId}:
+    put:
+      operationId: updateLineup
+      tags: [admin]
+      summary: Replace a curated lineup
+      parameters:
+        - name: lineupId
+          in: path
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LineupInput"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Lineup"
+        "400":
+          description: Invalid lineup
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    delete:
+      operationId: deleteLineup
+      tags: [admin]
+      summary: Delete a curated lineup
+      parameters:
+        - name: lineupId
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "204":
+          description: Deleted
+
+  /admin/substitutes:
+    get:
+      operationId: listAdminSubstitutes
+      tags: [admin]
+      summary: Substitute pools (optionally for one DPS)
+      parameters:
+        - name: dpsId
+          in: query
+          required: false
+          schema: { type: string }
+      responses:
+        "200":
+          description: Substitute pools
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/SubstitutePool"
+    put:
+      operationId: upsertSubstitutePool
+      tags: [admin]
+      summary: Create or replace the substitute pool for a DPS + role
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SubstitutePoolInput"
+      responses:
+        "200":
+          description: Saved pool
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SubstitutePool"
+        "400":
+          description: Invalid pool
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /admin/substitutes/{poolId}:
+    delete:
+      operationId: deleteSubstitutePool
+      tags: [admin]
+      summary: Delete a substitute pool
+      parameters:
+        - name: poolId
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "204":
+          description: Deleted
+
 components:
   schemas:
     HealthStatus:
@@ -34,3 +415,289 @@ components:
       required:
         - status
 
+    ErrorResponse:
+      type: object
+      required: [error]
+      properties:
+        error: { type: string }
+
+    Role:
+      type: string
+      enum: [dps, sub_dps, support, sustain]
+
+    SlotRole:
+      type: string
+      enum: [sub_dps, support, sustain]
+
+    OwnershipStatus:
+      type: string
+      enum: [owned, not_owned]
+
+    OwnershipState:
+      type: string
+      description: Ownership as seen by the UI; unknown means the user has not said.
+      enum: [owned, not_owned, unknown]
+
+    OwnershipMap:
+      type: object
+      description: Map of character id to ownership status. Ids not present are unknown.
+      additionalProperties:
+        $ref: "#/components/schemas/OwnershipStatus"
+
+    CharacterSummary:
+      type: object
+      description: A character as shown to players. path and element are display names, never internal keys.
+      required: [id, name, rarity, path, element, iconUrl]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        rarity: { type: integer }
+        path: { type: string, description: "Display path name, e.g. Preservation" }
+        element: { type: string, description: "Display element name, e.g. Lightning" }
+        elementColor: { type: ["string", "null"], description: "Hex color from elements.json, if available" }
+        iconUrl: { type: string }
+
+    DpsOption:
+      type: object
+      required: [character, lineupCount, isSample]
+      properties:
+        character:
+          $ref: "#/components/schemas/CharacterSummary"
+        lineupCount: { type: integer }
+        isSample:
+          type: boolean
+          description: True when any of this DPS's lineups are SAMPLE placeholder data
+
+    ResolvedSlotStatus:
+      type: string
+      description: |
+        owned = meta pick, confirmed owned.
+        unconfirmed = meta pick, user has not said whether they own it.
+        substituted = meta pick not owned, replaced from the curated substitute pool.
+        weak = no owned option in the pool; best owned character with this role by generic score.
+        needs_input = nothing owned for this role.
+      enum: [owned, unconfirmed, substituted, weak, needs_input]
+
+    ResolvedSlot:
+      type: object
+      required: [role, metaPick, metaOwnership, finalPick, status, score]
+      properties:
+        role:
+          $ref: "#/components/schemas/SlotRole"
+        metaPick:
+          $ref: "#/components/schemas/CharacterSummary"
+        metaOwnership:
+          $ref: "#/components/schemas/OwnershipState"
+        finalPick:
+          oneOf:
+            - $ref: "#/components/schemas/CharacterSummary"
+            - type: "null"
+        status:
+          $ref: "#/components/schemas/ResolvedSlotStatus"
+        score: { type: number }
+        lossNote: { type: ["string", "null"] }
+        fixNote: { type: ["string", "null"] }
+
+    ResolvedLineup:
+      type: object
+      required: [lineupId, originalRank, title, isSample, completeness, dps, slots]
+      properties:
+        lineupId: { type: integer }
+        originalRank: { type: integer }
+        title: { type: string }
+        isSample: { type: boolean }
+        completeness: { type: number, description: "Average slot score, 0-100" }
+        dps:
+          $ref: "#/components/schemas/CharacterSummary"
+        slots:
+          type: array
+          items:
+            $ref: "#/components/schemas/ResolvedSlot"
+
+    LineupsResult:
+      type: object
+      required: [dps, lineups]
+      properties:
+        dps:
+          $ref: "#/components/schemas/CharacterSummary"
+        lineups:
+          type: array
+          items:
+            $ref: "#/components/schemas/ResolvedLineup"
+
+    SubstituteCandidate:
+      type: object
+      required: [character, ownership]
+      properties:
+        character:
+          $ref: "#/components/schemas/CharacterSummary"
+        score: { type: ["number", "null"], description: "Curated score for this DPS; null for non-pool characters" }
+        genericScore: { type: ["number", "null"] }
+        lossNote: { type: ["string", "null"] }
+        fixNote: { type: ["string", "null"] }
+        ownership:
+          $ref: "#/components/schemas/OwnershipState"
+
+    SubstituteCandidates:
+      type: object
+      required: [role, pool, others]
+      properties:
+        role:
+          $ref: "#/components/schemas/SlotRole"
+        pool:
+          type: array
+          description: Curated substitute pool for this DPS and role, ordered by score desc
+          items:
+            $ref: "#/components/schemas/SubstituteCandidate"
+        others:
+          type: array
+          description: Other released characters with this role (not in the pool), ordered by generic score desc
+          items:
+            $ref: "#/components/schemas/SubstituteCandidate"
+
+    ExplainInput:
+      type: object
+      required: [lineup]
+      properties:
+        lineup:
+          $ref: "#/components/schemas/ResolvedLineup"
+
+    Explanation:
+      type: object
+      required: [explanation]
+      properties:
+        explanation: { type: string }
+
+    SyncStatus:
+      type: object
+      required: [characterCount, highestIds, hasCache, pearlPresent]
+      properties:
+        lastSyncAt: { type: ["string", "null"], format: date-time }
+        lastAttemptAt: { type: ["string", "null"], format: date-time }
+        lastAttemptOk: { type: ["boolean", "null"] }
+        lastError: { type: ["string", "null"] }
+        source:
+          type: ["string", "null"]
+          enum: [remote, cache, null]
+          description: Where the currently loaded data came from
+        hasCache: { type: boolean }
+        characterCount: { type: integer }
+        pearlPresent: { type: boolean, description: "Self-check: character id 1503 exists" }
+        highestIds:
+          type: array
+          description: The 10 characters with the highest numeric ids
+          items:
+            $ref: "#/components/schemas/CharacterSummary"
+
+    AdminCharacter:
+      type: object
+      required: [character, roles, isReleased, hasMeta, isSample, needsReview, isTrailblazer]
+      properties:
+        character:
+          $ref: "#/components/schemas/CharacterSummary"
+        roles:
+          type: array
+          items:
+            $ref: "#/components/schemas/Role"
+        genericScore: { type: ["number", "null"] }
+        isReleased: { type: boolean }
+        hasMeta: { type: boolean }
+        isSample: { type: boolean }
+        needsReview: { type: boolean, description: "No roles or not released" }
+        isTrailblazer: { type: boolean }
+
+    CharacterMetaInput:
+      type: object
+      required: [roles, isReleased]
+      properties:
+        roles:
+          type: array
+          items:
+            $ref: "#/components/schemas/Role"
+        genericScore: { type: ["number", "null"], minimum: 0, maximum: 100 }
+        isReleased: { type: boolean }
+
+    DpsCoverage:
+      type: object
+      required: [character, isReleased, lineupCount, poolRoles]
+      properties:
+        character:
+          $ref: "#/components/schemas/CharacterSummary"
+        isReleased: { type: boolean }
+        lineupCount: { type: integer }
+        poolRoles:
+          type: array
+          description: Slot roles that have a substitute pool
+          items:
+            $ref: "#/components/schemas/SlotRole"
+
+    LineupSlot:
+      type: object
+      required: [role, characterId]
+      properties:
+        role:
+          $ref: "#/components/schemas/SlotRole"
+        characterId: { type: string }
+
+    Lineup:
+      type: object
+      required: [id, dpsId, rank, title, isSample, slots]
+      properties:
+        id: { type: integer }
+        dpsId: { type: string }
+        rank: { type: integer, minimum: 1, maximum: 5 }
+        title: { type: string }
+        isSample: { type: boolean }
+        slots:
+          type: array
+          items:
+            $ref: "#/components/schemas/LineupSlot"
+
+    LineupInput:
+      type: object
+      required: [dpsId, rank, title, slots]
+      properties:
+        dpsId: { type: string }
+        rank: { type: integer, minimum: 1, maximum: 5 }
+        title: { type: string, minLength: 1 }
+        slots:
+          type: array
+          minItems: 3
+          maxItems: 3
+          items:
+            $ref: "#/components/schemas/LineupSlot"
+
+    SubstituteOption:
+      type: object
+      required: [characterId, score]
+      properties:
+        characterId: { type: string }
+        score: { type: number, minimum: 0, maximum: 100 }
+        lossNote: { type: ["string", "null"] }
+        fixNote: { type: ["string", "null"] }
+
+    SubstitutePool:
+      type: object
+      required: [id, dpsId, role, isSample, options]
+      properties:
+        id: { type: integer }
+        dpsId: { type: string }
+        role:
+          $ref: "#/components/schemas/SlotRole"
+        isSample: { type: boolean }
+        options:
+          type: array
+          items:
+            $ref: "#/components/schemas/SubstituteOption"
+
+    SubstitutePoolInput:
+      type: object
+      required: [dpsId, role, options]
+      properties:
+        dpsId: { type: string }
+        role:
+          $ref: "#/components/schemas/SlotRole"
+        options:
+          type: array
+          items:
+            $ref: "#/components/schemas/SubstituteOption"

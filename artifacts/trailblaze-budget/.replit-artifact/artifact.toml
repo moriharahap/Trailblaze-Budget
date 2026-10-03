@@ -1,0 +1,28 @@
+kind = "web"
+previewPath = "/"
+title = "Trailblaze Budget"
+description = "A Honkai: Star Rail lineup builder for free-to-play players. Pick a DPS you own, see up to 5 curated meta lineups, then mark missing teammates to get substitutes from your own roster with explained trade-offs. Includes an /admin area for syncing game data and curating lineups and substitutes."
+version = "1.0.0"
+id = "artifacts/trailblaze-budget"
+router = "path"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 25061
+
+[services.development]
+run = "pnpm --filter @workspace/trailblaze-budget run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/trailblaze-budget", "run", "build" ]
+serve = "static"
+publicDir = "artifacts/trailblaze-budget/dist/public"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "25061"
+BASE_PATH = "/"

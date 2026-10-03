@@ -1,0 +1,1 @@
+- [Curated data rules](curated-data-rules.md) — never derive roles from path or invent HSR data; only SAMPLE seed for one DPS

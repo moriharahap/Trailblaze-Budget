@@ -1,5 +1,7 @@
 import app from "./app";
 import { logger } from "./lib/logger";
+import { syncGameData } from "./lib/gameData";
+import { seedSampleData } from "./lib/seed";
 
 const rawPort = process.env["PORT"];
 
@@ -22,4 +24,10 @@ app.listen(port, (err) => {
   }
 
   logger.info({ port }, "Server listening");
+
+  // Game data sync on startup (falls back to the cached copy), then the
+  // one-time SAMPLE seed, which needs the synced character list.
+  syncGameData()
+    .then(() => seedSampleData())
+    .catch((err) => logger.error({ err }, "Startup sync/seed failed"));
 });
