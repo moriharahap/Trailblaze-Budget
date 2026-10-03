@@ -16,6 +16,10 @@ import { Switch } from "@/components/ui/switch";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription,
+  AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { CharIcon, SampleBadge, Shell } from "@/components/tb-ui";
 import { ROLE_LABEL, errMsg } from "@/lib/tb";
 import { cn } from "@/lib/utils";
@@ -174,6 +178,20 @@ function BulkBar({ ids, onDone }: { ids: string[]; onDone: (count: number) => vo
   // "Add" with no roles changes nothing; "Replace" with no roles clears roles on purpose.
   const touchesRoles = mode === "replace" || roles.length > 0;
   const canApply = (touchesRoles || release !== "keep") && !bulk.isPending;
+  // Destructive bulk actions hide characters from the player app and can't be undone, so they need confirmation.
+  const clearsRoles = mode === "replace" && roles.length === 0;
+  const unreleases = release === "unreleased";
+  const needsConfirm = clearsRoles || unreleases;
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const count = `${ids.length} character${ids.length === 1 ? "" : "s"}`;
+  const consequences = [
+    clearsRoles && "remove every role from them",
+    unreleases && "mark them unreleased",
+  ].filter(Boolean).join(" and ");
+  const onApplyClick = () => {
+    if (needsConfirm) setConfirmOpen(true);
+    else apply();
+  };
   const apply = () => {
     setError(null);
     bulk.mutate({
@@ -222,12 +240,29 @@ function BulkBar({ ids, onDone }: { ids: string[]; onDone: (count: number) => vo
         {" "}Generic scores are not changed.
       </p>
       <div className="flex items-center gap-3">
-        <button onClick={apply} disabled={!canApply}
-          className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-3.5 py-1.5 text-xs font-bold text-primary-foreground disabled:opacity-50" data-testid="button-bulk-apply">
+        <button onClick={onApplyClick} disabled={!canApply}
+          className={cn("inline-flex items-center gap-1.5 rounded-lg px-3.5 py-1.5 text-xs font-bold disabled:opacity-50",
+            needsConfirm ? "bg-destructive text-destructive-foreground" : "bg-primary text-primary-foreground")} data-testid="button-bulk-apply">
           <Save className="h-3.5 w-3.5" />{bulk.isPending ? "Applying…" : `Apply to ${ids.length}`}
         </button>
         {error && <span className="text-xs text-destructive" data-testid="text-bulk-error">{error}</span>}
       </div>
+      <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
+        <AlertDialogContent data-testid="dialog-bulk-confirm">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2"><AlertTriangle className="h-5 w-5 text-destructive" />Change {count}?</AlertDialogTitle>
+            <AlertDialogDescription data-testid="text-bulk-confirm-description">
+              This will {consequences} for {count}. They will disappear from the player app, and this can't be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel data-testid="button-bulk-confirm-cancel">Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={apply} className="bg-destructive text-destructive-foreground hover:bg-destructive/90" data-testid="button-bulk-confirm-apply">
+              Yes, change {count}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </motion.div>
   );
 }
