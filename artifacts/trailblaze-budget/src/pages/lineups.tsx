@@ -44,7 +44,11 @@ export default function LineupsPage() {
             </div>
           </motion.div>
           {data.lineups.length === 0 ? (
-            <div className="rounded-3xl border border-dashed p-10 text-center text-sm text-muted-foreground">No curated lineups for this DPS yet.</div>
+            <div className="rounded-3xl border border-dashed border-border p-10 text-center" data-testid="empty-lineups">
+              <p className="font-display text-lg font-bold">No curated lineups yet</p>
+              <p className="mt-2 text-sm text-muted-foreground">Teams for {data.dps.name} haven't been entered. Check back once they're curated.</p>
+              <Link href="/admin" className="font-data mt-4 inline-block text-[11px] text-muted-foreground underline-offset-4 hover:text-primary hover:underline" data-testid="link-empty-lineups-admin">curation console</Link>
+            </div>
           ) : (
             <LayoutGroup>
               <div className="space-y-4">

@@ -48,16 +48,16 @@ router.get("/dps", async (_req, res): Promise<void> => {
     .from(lineupsTable)
     .groupBy(lineupsTable.dpsId);
 
-  const result = counts
-    .map((c) => ({ ...c, row: roster.visible.get(c.dpsId) }))
-    .filter(
-      (c) => c.row && roster.meta.get(c.dpsId)!.roles.includes("dps"),
-    )
-    .sort((a, b) => nameCompare(a.row!, b.row!))
-    .map((c) => ({
-      character: toSummary(c.row!),
-      lineupCount: c.count,
-      isSample: c.anySample,
+  const byDps = new Map(counts.map((c) => [c.dpsId, c]));
+
+  // Every visible character with the dps role, with or without lineups.
+  const result = [...roster.visible.values()]
+    .filter((row) => roster.meta.get(row.id)!.roles.includes("dps"))
+    .sort(nameCompare)
+    .map((row) => ({
+      character: toSummary(row),
+      lineupCount: byDps.get(row.id)?.count ?? 0,
+      isSample: byDps.get(row.id)?.anySample ?? false,
     }));
   res.json(result);
 });

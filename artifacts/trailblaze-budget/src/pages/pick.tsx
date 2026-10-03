@@ -74,7 +74,7 @@ export default function PickPage() {
       ) : (data ?? []).length === 0 ? (
         <div className="rounded-3xl border border-dashed border-border p-10 text-center">
           <p className="font-display text-xl font-bold">The archive is empty.</p>
-          <p className="mt-2 text-sm text-muted-foreground">No curated lineups have been entered yet.</p>
+          <p className="mt-2 text-sm text-muted-foreground">No released DPS characters yet. Give a character the DPS role and mark it released in the curation console.</p>
           <Link href="/admin" className="mt-5 inline-block rounded-full bg-primary px-5 py-2 text-sm font-semibold text-primary-foreground" data-testid="link-empty-admin">Open curation console</Link>
         </div>
       ) : list.length === 0 ? (
@@ -95,7 +95,7 @@ export default function PickPage() {
             >
               <CharIcon c={d.character} size={64} className="transition-transform group-hover:-translate-y-0.5" />
               <span className="line-clamp-1 text-[13px] font-semibold">{d.character.name}</span>
-              <span className="font-data text-[10px] text-muted-foreground">{d.lineupCount} team{d.lineupCount === 1 ? "" : "s"}</span>
+              <span className="font-data text-[10px] text-muted-foreground">{d.lineupCount === 0 ? "No teams yet" : `${d.lineupCount} team${d.lineupCount === 1 ? "" : "s"}`}</span>
               {d.isSample && <SampleBadge />}
             </motion.button>
           ))}

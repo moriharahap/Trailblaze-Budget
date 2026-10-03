@@ -35,7 +35,7 @@ paths:
     get:
       operationId: listDps
       tags: [lineups]
-      summary: Released DPS characters that have at least one curated lineup
+      summary: Released characters with the dps role (lineupCount may be 0)
       responses:
         "200":
           description: DPS list

@@ -158,7 +158,7 @@ export const getListDpsUrl = () => {
 }
 
 /**
- * @summary Released DPS characters that have at least one curated lineup
+ * @summary Released characters with the dps role (lineupCount may be 0)
  */
 export const listDps = async ( options?: Parameters<typeof customFetch>[1]): Promise<DpsOption[]> => {
 
@@ -205,7 +205,7 @@ export type ListDpsQueryError = ErrorType<unknown>
 
 
 /**
- * @summary Released DPS characters that have at least one curated lineup
+ * @summary Released characters with the dps role (lineupCount may be 0)
  */
 
 export function useListDps<TData = Awaited<ReturnType<typeof listDps>>, TError = ErrorType<unknown>>(

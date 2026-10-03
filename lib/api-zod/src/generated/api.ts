@@ -18,7 +18,7 @@ export const HealthCheckResponse = zod.object({
 
 
 /**
- * @summary Released DPS characters that have at least one curated lineup
+ * @summary Released characters with the dps role (lineupCount may be 0)
  */
 export const ListDpsResponseItem = zod.object({
   "character": zod.object({
