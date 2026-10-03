@@ -21,6 +21,7 @@ import type {
 
 import type {
   AdminCharacter,
+  BulkCharacterMetaInput,
   CharacterMetaInput,
   DpsCoverage,
   DpsOption,
@@ -985,6 +986,94 @@ export const useUpdateCharacterMeta = <TError = ErrorType<ErrorResponse>,
         TContext
       > => {
       return useMutation(getUpdateCharacterMetaMutationOptions(options));
+    }
+
+export const getBulkUpdateCharacterMetaUrl = () => {
+
+
+
+
+  return `/api/admin/characters/bulk-meta`
+}
+
+/**
+ * @summary Apply roles and/or released status to many characters at once (generic score untouched)
+ */
+export const bulkUpdateCharacterMeta = async (bulkCharacterMetaInput: BulkCharacterMetaInput, options?: Parameters<typeof customFetch>[1]): Promise<AdminCharacter[]> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return customFetch<AdminCharacter[]>(getBulkUpdateCharacterMetaUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(bulkCharacterMetaInput)
+  }
+);}
+
+
+
+
+
+export const getBulkUpdateCharacterMetaMutationKey = () => ['bulkUpdateCharacterMeta'] as const;
+
+export const getBulkUpdateCharacterMetaMutationOptions = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof bulkUpdateCharacterMeta>>, TError,BulkUpdateCharacterMetaMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof bulkUpdateCharacterMeta>>, TError,BulkUpdateCharacterMetaMutationVariables, TContext> => {
+
+const mutationKey = getBulkUpdateCharacterMetaMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof bulkUpdateCharacterMeta>>, BulkUpdateCharacterMetaMutationVariables> = (props) => {
+          const {data} = props ?? {};
+
+          return  bulkUpdateCharacterMeta(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type BulkUpdateCharacterMetaMutationResult = NonNullable<Awaited<ReturnType<typeof bulkUpdateCharacterMeta>>>
+    export type BulkUpdateCharacterMetaMutationBody = BodyType<BulkCharacterMetaInput>
+    export type BulkUpdateCharacterMetaMutationError = ErrorType<ErrorResponse>
+    export type BulkUpdateCharacterMetaMutationVariables = {data: BodyType<BulkCharacterMetaInput>}
+
+    /**
+ * @summary Apply roles and/or released status to many characters at once (generic score untouched)
+ */
+export const useBulkUpdateCharacterMeta = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof bulkUpdateCharacterMeta>>, TError,BulkUpdateCharacterMetaMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof bulkUpdateCharacterMeta>>,
+        TError,
+        BulkUpdateCharacterMetaMutationVariables,
+        TContext
+      > => {
+      return useMutation(getBulkUpdateCharacterMetaMutationOptions(options));
     }
 
 export const getListDpsCoverageUrl = () => {

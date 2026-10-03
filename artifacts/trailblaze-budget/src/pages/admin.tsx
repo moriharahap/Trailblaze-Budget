@@ -4,7 +4,7 @@ import { AlertTriangle, ArrowDown, ArrowUp, RefreshCw, Trash2, Plus, Save, X } f
 import { useQueryClient } from "@tanstack/react-query";
 import {
   useGetSyncStatus, getGetSyncStatusQueryKey, useRunSync,
-  useListAdminCharacters, getListAdminCharactersQueryKey, useUpdateCharacterMeta,
+  useListAdminCharacters, getListAdminCharactersQueryKey, useUpdateCharacterMeta, useBulkUpdateCharacterMeta,
   useListDpsCoverage, getListDpsCoverageQueryKey,
   useListAdminLineups, getListAdminLineupsQueryKey, useCreateLineup, useUpdateLineup, useDeleteLineup,
   useListAdminSubstitutes, getListAdminSubstitutesQueryKey, useUpsertSubstitutePool, useDeleteSubstitutePool,
@@ -13,6 +13,7 @@ import {
 } from "@workspace/api-client-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Switch } from "@/components/ui/switch";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { CharIcon, SampleBadge, Shell } from "@/components/tb-ui";
@@ -107,8 +108,22 @@ function Stat({ k, v }: { k: string; v: string }) {
 function CharactersPanel() {
   const [filter, setFilter] = useState<"needs_review" | "all">("needs_review");
   const [q, setQ] = useState("");
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [notice, setNotice] = useState<string | null>(null);
   const { data, isLoading } = useListAdminCharacters({ filter });
   const list = (data ?? []).filter((c) => c.character.name.toLowerCase().includes(q.toLowerCase()));
+  const shownIds = list.map((c) => c.character.id);
+  const allShownSelected = shownIds.length > 0 && shownIds.every((id) => selected.has(id));
+  const toggle = (id: string) => setSelected((prev) => {
+    const next = new Set(prev);
+    if (next.has(id)) next.delete(id); else next.add(id);
+    return next;
+  });
+  const toggleAllShown = () => setSelected((prev) => {
+    const next = new Set(prev);
+    if (allShownSelected) shownIds.forEach((id) => next.delete(id)); else shownIds.forEach((id) => next.add(id));
+    return next;
+  });
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap gap-2">
@@ -119,14 +134,102 @@ function CharactersPanel() {
         ))}
         <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search" className={cn(inputCls, "flex-1")} data-testid="input-admin-search" />
       </div>
+      {list.length > 0 && (
+        <div className="flex items-center justify-between gap-2 px-1 text-xs text-muted-foreground">
+          <label className="flex cursor-pointer items-center gap-2">
+            <Checkbox checked={allShownSelected} onCheckedChange={toggleAllShown} data-testid="checkbox-select-all" />
+            Select all shown ({shownIds.length})
+          </label>
+          {selected.size > 0 && (
+            <button onClick={() => setSelected(new Set())} className="underline-offset-2 hover:text-foreground hover:underline" data-testid="button-clear-selection">Clear selection</button>
+          )}
+        </div>
+      )}
+      {notice && selected.size === 0 && (
+        <p className="rounded-xl border border-primary/40 bg-primary/10 px-3 py-2 text-xs text-primary" data-testid="text-bulk-success">{notice}</p>
+      )}
+      {selected.size > 0 && <BulkBar ids={[...selected]} onDone={(n) => { setNotice(`Updated ${n} character${n === 1 ? "" : "s"}.`); setSelected(new Set()); }} />}
       {isLoading ? <Skeleton className="h-40 rounded-2xl" /> : list.length === 0 ? (
         <Panel className="text-center text-sm text-muted-foreground">{filter === "needs_review" ? "Nothing needs review. Clean archive." : "No characters."}</Panel>
-      ) : list.map((c) => <CharEditor key={c.character.id} c={c} />)}
+      ) : list.map((c) => (
+        <CharEditor key={`${c.character.id}:${c.roles.join(",")}:${c.isReleased}:${c.genericScore}`} c={c}
+          selected={selected.has(c.character.id)} onToggle={() => toggle(c.character.id)} />
+      ))}
     </div>
   );
 }
 
-function CharEditor({ c }: { c: AdminCharacter }) {
+type ReleaseChoice = "keep" | "released" | "unreleased";
+
+function BulkBar({ ids, onDone }: { ids: string[]; onDone: (count: number) => void }) {
+  const [roles, setRoles] = useState<Role[]>([]);
+  const [mode, setMode] = useState<"add" | "replace">("add");
+  const [release, setRelease] = useState<ReleaseChoice>("keep");
+  const [error, setError] = useState<string | null>(null);
+  const bulk = useBulkUpdateCharacterMeta();
+  const inv = useInvalidateAdmin();
+  // "Add" with no roles changes nothing; "Replace" with no roles clears roles on purpose.
+  const touchesRoles = mode === "replace" || roles.length > 0;
+  const canApply = (touchesRoles || release !== "keep") && !bulk.isPending;
+  const apply = () => {
+    setError(null);
+    bulk.mutate({
+      data: {
+        characterIds: ids,
+        ...(touchesRoles ? { roles, rolesMode: mode } : {}),
+        ...(release !== "keep" ? { isReleased: release === "released" } : {}),
+      },
+    }, {
+      onSuccess: (rows) => {
+        inv();
+        onDone(rows.length);
+      },
+      onError: (err) => setError(errMsg(err)),
+    });
+  };
+  const seg = (on: boolean) => cn("px-2.5 py-1 text-xs transition-colors", on ? "bg-primary text-primary-foreground" : "hover:bg-secondary");
+  return (
+    <motion.div initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }}
+      className="sticky top-2 z-20 space-y-3 rounded-2xl border border-primary/50 bg-card/95 p-4 shadow-lg backdrop-blur" data-testid="panel-bulk">
+      <div className="font-data text-[11px] uppercase tracking-[0.2em] text-primary">Bulk edit · {ids.length} selected</div>
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="w-14 text-xs text-muted-foreground">Roles</span>
+        {ROLES.map((r) => {
+          const on = roles.includes(r);
+          return <motion.button whileTap={{ scale: 0.9 }} key={r} onClick={() => setRoles(on ? roles.filter((x) => x !== r) : [...roles, r])}
+            className={cn("rounded-full border px-2.5 py-1 text-xs", on ? "border-primary bg-primary/15 text-primary" : "border-border text-muted-foreground")} data-testid={`chip-bulk-role-${r}`}>{ROLE_LABEL[r]}</motion.button>;
+        })}
+        <div className="flex overflow-hidden rounded-full border border-border">
+          <button onClick={() => setMode("add")} className={seg(mode === "add")} data-testid="button-bulk-mode-add">Add</button>
+          <button onClick={() => setMode("replace")} className={cn(seg(mode === "replace"), "border-l border-border")} data-testid="button-bulk-mode-replace">Replace</button>
+        </div>
+      </div>
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="w-14 text-xs text-muted-foreground">Released</span>
+        <div className="flex overflow-hidden rounded-full border border-border">
+          {([["keep", "Leave as is"], ["released", "Released"], ["unreleased", "Unreleased"]] as const).map(([v, l], i) => (
+            <button key={v} onClick={() => setRelease(v)} className={cn(seg(release === v), i > 0 && "border-l border-border")} data-testid={`button-bulk-release-${v}`}>{l}</button>
+          ))}
+        </div>
+      </div>
+      <p className="text-[11px] text-muted-foreground">
+        {mode === "replace"
+          ? roles.length === 0 ? "Replace with no roles clears every selected character's roles." : "Selected characters will have exactly these roles."
+          : roles.length === 0 ? "Pick roles to add, or only change released status." : "These roles are added to each character's existing roles."}
+        {" "}Generic scores are not changed.
+      </p>
+      <div className="flex items-center gap-3">
+        <button onClick={apply} disabled={!canApply}
+          className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-3.5 py-1.5 text-xs font-bold text-primary-foreground disabled:opacity-50" data-testid="button-bulk-apply">
+          <Save className="h-3.5 w-3.5" />{bulk.isPending ? "Applying…" : `Apply to ${ids.length}`}
+        </button>
+        {error && <span className="text-xs text-destructive" data-testid="text-bulk-error">{error}</span>}
+      </div>
+    </motion.div>
+  );
+}
+
+function CharEditor({ c, selected, onToggle }: { c: AdminCharacter; selected: boolean; onToggle: () => void }) {
   const [roles, setRoles] = useState<Role[]>(c.roles);
   const [score, setScore] = useState<string>(c.genericScore?.toString() ?? "");
   const [rel, setRel] = useState(c.isReleased);
@@ -134,8 +237,9 @@ function CharEditor({ c }: { c: AdminCharacter }) {
   const inv = useInvalidateAdmin();
   const save = () => upd.mutate({ characterId: c.character.id, data: { roles, genericScore: score === "" ? null : Number(score), isReleased: rel } }, { onSuccess: inv });
   return (
-    <Panel className="space-y-3">
+    <Panel className={cn("space-y-3", selected && "border-primary/60")}>
       <div className="flex items-center gap-3">
+        <Checkbox checked={selected} onCheckedChange={onToggle} aria-label={`Select ${c.character.name}`} data-testid={`checkbox-char-${c.character.id}`} />
         <CharIcon c={c.character} size={44} />
         <div className="flex-1">
           <div className="flex items-center gap-2 font-semibold">{c.character.name}{c.isSample && <SampleBadge />}</div>

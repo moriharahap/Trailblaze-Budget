@@ -7,6 +7,8 @@
  */
 
 export * from './adminCharacter';
+export * from './bulkCharacterMetaInput';
+export * from './bulkCharacterMetaInputRolesMode';
 export * from './characterMetaInput';
 export * from './characterSummary';
 export * from './dpsCoverage';

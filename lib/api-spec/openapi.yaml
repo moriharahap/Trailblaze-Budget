@@ -242,6 +242,33 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /admin/characters/bulk-meta:
+    post:
+      operationId: bulkUpdateCharacterMeta
+      tags: [admin]
+      summary: Apply roles and/or released status to many characters at once (generic score untouched)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BulkCharacterMetaInput"
+      responses:
+        "200":
+          description: Updated characters
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/AdminCharacter"
+        "400":
+          description: Invalid input or unknown character ids (nothing is saved)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
   /admin/coverage:
     get:
       operationId: listDpsCoverage
@@ -616,6 +643,28 @@ components:
             $ref: "#/components/schemas/Role"
         genericScore: { type: ["number", "null"], minimum: 0, maximum: 100 }
         isReleased: { type: boolean }
+
+    BulkCharacterMetaInput:
+      type: object
+      required: [characterIds]
+      properties:
+        characterIds:
+          type: array
+          minItems: 1
+          maxItems: 500
+          items: { type: string }
+        roles:
+          type: array
+          description: Roles to apply. Omit to leave roles unchanged.
+          items:
+            $ref: "#/components/schemas/Role"
+        rolesMode:
+          type: string
+          enum: [add, replace]
+          description: add = union with existing roles; replace = overwrite. Required when roles is given.
+        isReleased:
+          type: boolean
+          description: Omit to leave released status unchanged.
 
     DpsCoverage:
       type: object

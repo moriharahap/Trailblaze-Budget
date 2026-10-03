@@ -220,6 +220,31 @@ export interface CharacterMetaInput {
   isReleased: boolean;
 }
 
+/**
+ * add = union with existing roles; replace = overwrite. Required when roles is given.
+ */
+export type BulkCharacterMetaInputRolesMode = typeof BulkCharacterMetaInputRolesMode[keyof typeof BulkCharacterMetaInputRolesMode];
+
+
+export const BulkCharacterMetaInputRolesMode = {
+  add: 'add',
+  replace: 'replace',
+} as const;
+
+export interface BulkCharacterMetaInput {
+  /**
+     * @minItems 1
+     * @maxItems 500
+     */
+  characterIds: string[];
+  /** Roles to apply. Omit to leave roles unchanged. */
+  roles?: Role[];
+  /** add = union with existing roles; replace = overwrite. Required when roles is given. */
+  rolesMode?: BulkCharacterMetaInputRolesMode;
+  /** Omit to leave released status unchanged. */
+  isReleased?: boolean;
+}
+
 export interface DpsCoverage {
   character: CharacterSummary;
   isReleased: boolean;

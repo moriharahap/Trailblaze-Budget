@@ -39,7 +39,7 @@ Honkai: Star Rail lineup builder for F2P players: pick a DPS, see curated meta l
 ## Product
 
 - Pick DPS → ranked lineup cards → Have / Don't have → substitute sheet → re-ranked lineups with loss/fix notes → optional AI explanation.
-- /admin (no auth): sync status, needs-review characters, coverage, lineup + substitute editors.
+- /admin (no auth): sync status, needs-review characters (with multi-select bulk role / released tagging; generic score is never bulk-edited), coverage, lineup + substitute editors.
 
 ## User preferences
 

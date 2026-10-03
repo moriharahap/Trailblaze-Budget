@@ -9,11 +9,12 @@ import {
   type SubstituteRow,
   type RoleValue,
 } from "@workspace/db";
-import { asc, eq } from "drizzle-orm";
+import { asc, eq, inArray } from "drizzle-orm";
 import {
   ListAdminCharactersQueryParams,
   UpdateCharacterMetaParams,
   UpdateCharacterMetaBody,
+  BulkUpdateCharacterMetaBody,
   ListAdminLineupsQueryParams,
   CreateLineupBody,
   UpdateLineupParams,
@@ -66,6 +67,89 @@ router.get("/admin/characters", async (req, res): Promise<void> => {
     .sort((a, b) => b._id - a._id)
     .map(({ _id, ...r }) => r);
   res.json(rows);
+});
+
+router.post("/admin/characters/bulk-meta", async (req, res): Promise<void> => {
+  const body = BulkUpdateCharacterMetaBody.safeParse(req.body);
+  if (!body.success) {
+    res.status(400).json({ error: body.error.message });
+    return;
+  }
+  const { roles, rolesMode, isReleased } = body.data;
+  const ids = [...new Set(body.data.characterIds)];
+  if (roles === undefined && isReleased === undefined) {
+    res.status(400).json({ error: "Nothing to change: give roles and/or isReleased" });
+    return;
+  }
+  if (roles !== undefined && rolesMode === undefined) {
+    res.status(400).json({ error: "rolesMode (add or replace) is required with roles" });
+    return;
+  }
+
+  const characters = await db
+    .select()
+    .from(charactersTable)
+    .where(inArray(charactersTable.id, ids));
+  if (characters.length !== ids.length) {
+    const known = new Set(characters.map((c) => c.id));
+    const unknown = ids.filter((id) => !known.has(id));
+    res.status(400).json({ error: `Unknown character ids: ${unknown.join(", ")}` });
+    return;
+  }
+
+  const existing = new Map(
+    (
+      await db
+        .select()
+        .from(characterMetaTable)
+        .where(inArray(characterMetaTable.characterId, ids))
+    ).map((m) => [m.characterId, m]),
+  );
+  const newRoles = [...new Set(roles ?? [])] as RoleValue[];
+
+  // Generic score is deliberately left alone: it stays per-character.
+  const saved = await db.transaction(async (tx) => {
+    const out = [];
+    for (const id of ids) {
+      const prev = existing.get(id);
+      const nextRoles =
+        roles === undefined
+          ? (prev?.roles ?? [])
+          : rolesMode === "replace"
+            ? newRoles
+            : ([...new Set([...(prev?.roles ?? []), ...newRoles])] as RoleValue[]);
+      const values = {
+        roles: nextRoles,
+        isReleased: isReleased ?? prev?.isReleased ?? false,
+        isSample: false,
+        updatedAt: new Date(),
+      };
+      const [meta] = await tx
+        .insert(characterMetaTable)
+        .values({ characterId: id, genericScore: null, ...values })
+        .onConflictDoUpdate({ target: characterMetaTable.characterId, set: values })
+        .returning();
+      out.push(meta);
+    }
+    return out;
+  });
+
+  const byId = new Map(characters.map((c) => [c.id, c]));
+  res.json(
+    saved.map((meta) => {
+      const character = byId.get(meta.characterId)!;
+      return {
+        character: toSummary(character),
+        roles: meta.roles,
+        genericScore: meta.genericScore,
+        isReleased: meta.isReleased,
+        hasMeta: true,
+        isSample: meta.isSample,
+        needsReview: !isVisible(meta),
+        isTrailblazer: character.isTrailblazer,
+      };
+    }),
+  );
 });
 
 router.put("/admin/characters/:characterId/meta", async (req, res): Promise<void> => {

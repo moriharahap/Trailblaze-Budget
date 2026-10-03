@@ -341,6 +341,41 @@ export const UpdateCharacterMetaResponse = zod.object({
 
 
 /**
+ * @summary Apply roles and/or released status to many characters at once (generic score untouched)
+ */
+export const bulkUpdateCharacterMetaBodyCharacterIdsMax = 500;
+
+
+
+export const BulkUpdateCharacterMetaBody = zod.object({
+  "characterIds": zod.array(zod.string()).min(1).max(bulkUpdateCharacterMetaBodyCharacterIdsMax),
+  "roles": zod.array(zod.enum(['dps', 'sub_dps', 'support', 'sustain'])).optional().describe('Roles to apply. Omit to leave roles unchanged.'),
+  "rolesMode": zod.enum(['add', 'replace']).optional().describe('add = union with existing roles; replace = overwrite. Required when roles is given.'),
+  "isReleased": zod.boolean().optional().describe('Omit to leave released status unchanged.')
+})
+
+export const BulkUpdateCharacterMetaResponseItem = zod.object({
+  "character": zod.object({
+  "id": zod.string(),
+  "name": zod.string(),
+  "rarity": zod.number().int(),
+  "path": zod.string().describe('Display path name, e.g. Preservation'),
+  "element": zod.string().describe('Display element name, e.g. Lightning'),
+  "elementColor": zod.string().nullish().describe('Hex color from elements.json, if available'),
+  "iconUrl": zod.string()
+}).describe('A character as shown to players. path and element are display names, never internal keys.'),
+  "roles": zod.array(zod.enum(['dps', 'sub_dps', 'support', 'sustain'])),
+  "genericScore": zod.number().nullish(),
+  "isReleased": zod.boolean(),
+  "hasMeta": zod.boolean(),
+  "isSample": zod.boolean(),
+  "needsReview": zod.boolean().describe('No roles or not released'),
+  "isTrailblazer": zod.boolean()
+})
+export const BulkUpdateCharacterMetaResponse = zod.array(BulkUpdateCharacterMetaResponseItem)
+
+
+/**
  * @summary For every character with the dps role, how much curated data exists
  */
 export const ListDpsCoverageResponseItem = zod.object({
