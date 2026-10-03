@@ -18,7 +18,10 @@ import {
   UpdateOwnershipBody,
   ExplainLineupBody,
 } from "@workspace/api-zod";
-import { openai } from "@workspace/integrations-openai-ai-server";
+import {
+  openai,
+  hasOpenAICredentials,
+} from "@workspace/integrations-openai-ai-server";
 import { loadRoster, toSummary, nameCompare } from "../lib/characters";
 import { resolveLineups, type EngineSlotRole } from "../lib/lineupEngine";
 
@@ -258,6 +261,18 @@ router.put("/ownership/:anonId", async (req, res): Promise<void> => {
   res.json(await loadOwnership(anonId));
 });
 
+/**
+ * Model used for the explainer.
+ *
+ * `gpt-5.6-terra` is an alias that only exists on Replit's AI Integrations
+ * proxy, so it is kept as the default only when that proxy is in use. On any
+ * other host set EXPLAIN_MODEL to a model your OpenAI account can actually
+ * reach.
+ */
+const EXPLAIN_MODEL =
+  process.env.EXPLAIN_MODEL ??
+  (process.env.AI_INTEGRATIONS_OPENAI_BASE_URL ? "gpt-5.6-terra" : "gpt-4o");
+
 const EXPLAIN_SYSTEM_PROMPT = `You explain Honkai: Star Rail team lineups for free-to-play players.
 Use ONLY the JSON provided by the user. Never add characters, abilities, mechanics, numbers, relics, light cones, or facts that are not in the input JSON. If the JSON does not contain enough information for a point, say so briefly instead of guessing.
 Write a short explanation (at most ~150 words, plain text, no markdown headings) covering:
@@ -272,6 +287,13 @@ router.post("/explain", async (req, res): Promise<void> => {
     res.status(400).json({ error: body.error.message });
     return;
   }
+  if (!hasOpenAICredentials()) {
+    res
+      .status(503)
+      .json({ error: "Explanations are not configured on this server" });
+    return;
+  }
+
   const l = body.data.lineup;
   const compact = {
     title: l.title,
@@ -290,7 +312,7 @@ router.post("/explain", async (req, res): Promise<void> => {
 
   try {
     const completion = await openai.chat.completions.create({
-      model: "gpt-5.6-terra",
+      model: EXPLAIN_MODEL,
       max_completion_tokens: 8192,
       messages: [
         { role: "system", content: EXPLAIN_SYSTEM_PROMPT },

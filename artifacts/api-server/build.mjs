@@ -15,7 +15,14 @@ async function buildAll() {
   await rm(distDir, { recursive: true, force: true });
 
   await esbuild({
-    entryPoints: [path.resolve(artifactDir, "src/index.ts")],
+    entryPoints: [
+      // Long-lived server (Replit, Render, local dev): binds a port.
+      path.resolve(artifactDir, "src/index.ts"),
+      // Serverless handler (Vercel): exports the Express app, binds nothing.
+      path.resolve(artifactDir, "src/serverless.ts"),
+      // One-off database bootstrap for hosts that never run index.ts.
+      path.resolve(artifactDir, "src/seedOnce.ts"),
+    ],
     platform: "node",
     bundle: true,
     format: "esm",

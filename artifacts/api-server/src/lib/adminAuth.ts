@@ -97,13 +97,30 @@ export function requireAdmin(req: Request, res: Response, next: NextFunction): v
 
 const MAX_FAILURES = 10;
 const WINDOW_MS = 15 * 60 * 1000;
+// NOTE: this state is per-process. On a single long-lived server (Replit,
+// Render) the limit is global. On serverless (Vercel) each warm instance keeps
+// its own counter, so the effective limit is MAX_FAILURES per instance. Move
+// this to the database or a KV store if the throttle needs to be strict.
 const failures = new Map<string, { count: number; resetAt: number }>();
 
 /**
- * The Replit proxy appends the real client address to X-Forwarded-For, so the
- * right-most entry is the one a client can't spoof.
+ * Identify the client for throttling purposes, using only headers the hosting
+ * proxy sets itself (a client-supplied value must never be trusted here, or
+ * the throttle can be bypassed by rotating a forged header).
+ *
+ * Proxies disagree on which end of X-Forwarded-For is trustworthy:
+ *   - Replit appends the real client address, so the RIGHT-most entry is safe.
+ *   - Vercel puts the client IP FIRST, and additionally sets its own
+ *     `x-vercel-forwarded-for` / `x-real-ip`, which a client cannot forge.
+ *
+ * Vercel's dedicated headers are therefore preferred when present, and the
+ * Replit right-most behaviour is kept as the fallback.
  */
 export function clientKey(req: Request): string {
+  const vercel = req.get("x-vercel-forwarded-for") ?? req.get("x-real-ip");
+  const trusted = vercel?.split(",")[0]?.trim();
+  if (trusted) return trusted;
+
   const xff = req.get("x-forwarded-for");
   const last = xff?.split(",").map((s) => s.trim()).filter(Boolean).pop();
   return last ?? req.socket.remoteAddress ?? "unknown";
