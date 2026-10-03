@@ -13,6 +13,17 @@ export interface ErrorResponse {
   error: string;
 }
 
+export interface AdminSession {
+  authenticated: boolean;
+  /** False when the ADMIN_PASSWORD secret is not set (admin is locked for everyone) */
+  configured: boolean;
+}
+
+export interface AdminLoginRequest {
+  /** @minLength 1 */
+  password: string;
+}
+
 export type Role = typeof Role[keyof typeof Role];
 
 

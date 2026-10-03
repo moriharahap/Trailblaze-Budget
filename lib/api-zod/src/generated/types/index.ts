@@ -7,6 +7,8 @@
  */
 
 export * from './adminCharacter';
+export * from './adminLoginRequest';
+export * from './adminSession';
 export * from './bulkCharacterMetaInput';
 export * from './bulkCharacterMetaInputRolesMode';
 export * from './characterMetaInput';

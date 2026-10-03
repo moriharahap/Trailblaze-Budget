@@ -10,7 +10,7 @@ Honkai: Star Rail lineup builder for F2P players: pick a DPS, see curated meta l
 - `pnpm --filter @workspace/api-spec run codegen` — regenerate API hooks and Zod schemas from the OpenAPI spec
 - `pnpm --filter @workspace/db run push` — push DB schema changes (dev only)
 - `pnpm --filter @workspace/api-server run test` — lineup engine unit tests (vitest)
-- Required env: `DATABASE_URL` — Postgres connection string
+- Required env: `DATABASE_URL` — Postgres connection string; secret `ADMIN_PASSWORD` — shared /admin password (admin is locked for everyone when unset)
 
 ## Stack
 
@@ -34,12 +34,13 @@ Honkai: Star Rail lineup builder for F2P players: pick a DPS, see curated meta l
 - Trailblazer {NICKNAME} pairs are merged into one row per path, keyed by the smallest id of the pair.
 - Lineups whose meta picks include a hidden character are skipped for players.
 - The SAMPLE seed runs once, tracked by the `sample_seed_v1` key in app_state. Rows deleted in /admin stay deleted. Editing a sample row in /admin clears its is_sample flag.
+- Admin auth: `/api/admin/login` sets a stateless HMAC-signed httpOnly cookie (path `/api/admin`, 7 days). Key = SESSION_SECRET + ADMIN_PASSWORD, so changing the password logs everyone out. `requireAdmin` is mounted on `/admin` in `routes/index.ts` after the public login/logout/session routes; new admin routes are protected automatically.
 - The explainer uses Replit AI Integrations (OpenAI), not an LLM_API_KEY secret.
 
 ## Product
 
 - Pick DPS → ranked lineup cards → Have / Don't have → substitute sheet → re-ranked lineups with loss/fix notes → optional AI explanation.
-- /admin (no auth): sync status, needs-review characters (with multi-select bulk role / released tagging; generic score is never bulk-edited), coverage, lineup + substitute editors.
+- /admin (shared password): sync status, needs-review characters (with multi-select bulk role / released tagging; generic score is never bulk-edited), coverage, lineup + substitute editors.
 
 ## User preferences
 

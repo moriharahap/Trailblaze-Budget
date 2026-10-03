@@ -15,7 +15,9 @@ tags:
   - name: ownership
     description: Anonymous per-user character ownership
   - name: admin
-    description: Game data sync and curated data editing
+    description: Game data sync and curated data editing (requires an admin session)
+  - name: admin-auth
+    description: Admin password login and session
 paths:
   /healthz:
     get:
@@ -165,6 +167,67 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+
+  /admin/session:
+    get:
+      operationId: getAdminSession
+      tags: [admin-auth]
+      summary: Whether the caller holds a valid admin session
+      responses:
+        "200":
+          description: Session state
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminSession"
+  /admin/login:
+    post:
+      operationId: adminLogin
+      tags: [admin-auth]
+      summary: Exchange the shared admin password for an admin session cookie
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AdminLoginRequest"
+      responses:
+        "200":
+          description: Logged in
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminSession"
+        "401":
+          description: Wrong password
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "429":
+          description: Too many failed attempts
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "503":
+          description: Admin password not configured
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /admin/logout:
+    post:
+      operationId: adminLogout
+      tags: [admin-auth]
+      summary: Clear the admin session cookie
+      responses:
+        "200":
+          description: Logged out
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminSession"
 
   /admin/sync:
     get:
@@ -447,6 +510,21 @@ components:
       required: [error]
       properties:
         error: { type: string }
+
+    AdminSession:
+      type: object
+      required: [authenticated, configured]
+      properties:
+        authenticated: { type: boolean }
+        configured:
+          type: boolean
+          description: False when the ADMIN_PASSWORD secret is not set (admin is locked for everyone)
+
+    AdminLoginRequest:
+      type: object
+      required: [password]
+      properties:
+        password: { type: string, minLength: 1 }
 
     Role:
       type: string

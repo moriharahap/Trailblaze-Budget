@@ -19,6 +19,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { CharIcon, SampleBadge, Shell } from "@/components/tb-ui";
 import { ROLE_LABEL, errMsg } from "@/lib/tb";
 import { cn } from "@/lib/utils";
+import { AdminGate } from "@/components/admin-gate";
 
 const ROLES: Role[] = ["dps", "sub_dps", "support", "sustain"];
 const SLOT_ROLES: SlotRole[] = ["sub_dps", "support", "sustain"];
@@ -41,20 +42,22 @@ export default function AdminPage() {
   const [tab, setTab] = useState("sync");
   return (
     <Shell>
-      <p className="font-data text-[11px] uppercase tracking-[0.25em] text-accent">Conductor's console</p>
-      <h1 className="font-display mb-5 text-3xl font-extrabold tracking-tight">Curation</h1>
-      <Tabs value={tab} onValueChange={setTab}>
-        <TabsList className="mb-5 flex h-auto w-full flex-wrap justify-start gap-1 bg-card p-1">
-          {[["sync", "Sync"], ["review", "Characters"], ["coverage", "Coverage"], ["lineups", "Lineups"], ["subs", "Substitutes"]].map(([v, l]) => (
-            <TabsTrigger key={v} value={v} className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground" data-testid={`tab-${v}`}>{l}</TabsTrigger>
-          ))}
-        </TabsList>
-        <TabsContent value="sync"><SyncPanel /></TabsContent>
-        <TabsContent value="review"><CharactersPanel /></TabsContent>
-        <TabsContent value="coverage"><CoveragePanel onPick={(id) => { setDpsId(id); setTab("lineups"); }} /></TabsContent>
-        <TabsContent value="lineups"><DpsSelect value={dpsId} onChange={setDpsId} />{dpsId && <LineupsEditor dpsId={dpsId} />}</TabsContent>
-        <TabsContent value="subs"><DpsSelect value={dpsId} onChange={setDpsId} />{dpsId && <SubsEditor dpsId={dpsId} />}</TabsContent>
-      </Tabs>
+      <AdminGate>
+        <p className="font-data text-[11px] uppercase tracking-[0.25em] text-accent">Conductor's console</p>
+        <h1 className="font-display mb-5 text-3xl font-extrabold tracking-tight">Curation</h1>
+        <Tabs value={tab} onValueChange={setTab}>
+          <TabsList className="mb-5 flex h-auto w-full flex-wrap justify-start gap-1 bg-card p-1">
+            {[["sync", "Sync"], ["review", "Characters"], ["coverage", "Coverage"], ["lineups", "Lineups"], ["subs", "Substitutes"]].map(([v, l]) => (
+              <TabsTrigger key={v} value={v} className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground" data-testid={`tab-${v}`}>{l}</TabsTrigger>
+            ))}
+          </TabsList>
+          <TabsContent value="sync"><SyncPanel /></TabsContent>
+          <TabsContent value="review"><CharactersPanel /></TabsContent>
+          <TabsContent value="coverage"><CoveragePanel onPick={(id) => { setDpsId(id); setTab("lineups"); }} /></TabsContent>
+          <TabsContent value="lineups"><DpsSelect value={dpsId} onChange={setDpsId} />{dpsId && <LineupsEditor dpsId={dpsId} />}</TabsContent>
+          <TabsContent value="subs"><DpsSelect value={dpsId} onChange={setDpsId} />{dpsId && <SubsEditor dpsId={dpsId} />}</TabsContent>
+        </Tabs>
+      </AdminGate>
     </Shell>
   );
 }

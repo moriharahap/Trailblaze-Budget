@@ -227,6 +227,40 @@ export const ExplainLineupResponse = zod.object({
 
 
 /**
+ * @summary Whether the caller holds a valid admin session
+ */
+export const GetAdminSessionResponse = zod.object({
+  "authenticated": zod.boolean(),
+  "configured": zod.boolean().describe('False when the ADMIN_PASSWORD secret is not set (admin is locked for everyone)')
+})
+
+
+/**
+ * @summary Exchange the shared admin password for an admin session cookie
+ */
+
+
+
+export const AdminLoginBody = zod.object({
+  "password": zod.string().min(1)
+})
+
+export const AdminLoginResponse = zod.object({
+  "authenticated": zod.boolean(),
+  "configured": zod.boolean().describe('False when the ADMIN_PASSWORD secret is not set (admin is locked for everyone)')
+})
+
+
+/**
+ * @summary Clear the admin session cookie
+ */
+export const AdminLogoutResponse = zod.object({
+  "authenticated": zod.boolean(),
+  "configured": zod.boolean().describe('False when the ADMIN_PASSWORD secret is not set (admin is locked for everyone)')
+})
+
+
+/**
  * @summary Status of the last game data sync
  */
 export const GetSyncStatusResponse = zod.object({
